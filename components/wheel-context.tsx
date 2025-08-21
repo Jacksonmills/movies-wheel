@@ -269,7 +269,9 @@ export function WheelProvider({ children }: { children: React.ReactNode; }) {
     if (!canvasShownRef.current) {
       requestAnimationFrame(() => requestAnimationFrame(() => {
         canvasShownRef.current = true;
-        try { setCanvasShown(true); } catch (e) { }
+        try { setCanvasShown(true); } catch (e) {
+          console.error("Error setting canvas shown state:", e);
+        }
       }));
     }
   }, [slices, radius, angle, wrapRightAlignedText]);
@@ -280,6 +282,7 @@ export function WheelProvider({ children }: { children: React.ReactNode; }) {
       // Draw synchronously so the canvas matches the latest `radius` before paint.
       draw(rotationRef.current);
     } catch (e) {
+      console.error("Error drawing canvas:", e);
       // Fallback to async draw if sync draw throws for some reason.
       requestAnimationFrame(() => draw(rotationRef.current));
     }
@@ -379,7 +382,9 @@ export function WheelProvider({ children }: { children: React.ReactNode; }) {
         noiseSrc.disconnect();
         noiseFilter.disconnect();
         noiseGain.disconnect();
-      } catch (e) { }
+      } catch (e) {
+        console.error("Error cleaning up audio nodes:", e);
+      }
     }, cleanupMs);
   }
 
