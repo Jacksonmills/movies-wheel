@@ -181,15 +181,21 @@ export default function Wheel() {
     ctx.rotate(rotation);
 
     if (slices.length === 0) {
+      // Cancel the rotation so the empty-state text is always drawn upright.
+      ctx.rotate(-rotation);
+
       // use token-based background for empty wheel via CSS variable
       ctx.fillStyle = styleSource.getPropertyValue('--card') || 'black';
       ctx.beginPath();
       ctx.arc(0, 0, radius, 0, 2 * Math.PI);
       ctx.fill();
+
       ctx.fillStyle = styleSource.getPropertyValue('--muted-foreground') || 'gray';
       ctx.font = "16px ui-sans-serif, system-ui";
       ctx.textAlign = "center";
-      ctx.fillText("Add movies to start", 0, 6);
+      ctx.textBaseline = "middle";
+      ctx.fillText("Add movies to start", 0, 0);
+
       ctx.restore();
       return;
     }
@@ -298,18 +304,72 @@ export default function Wheel() {
     const master = masterGainRef.current;
     if (!ctx || !master) return;
     const now = ctx.currentTime;
+
+    // body oscillator (warm, short pitch drop)
     const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.value = 2200; // ~2.2 kHz
-    // envelope ~50ms
-    g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(1, now + 0.005);
-    g.gain.linearRampToValueAtTime(0, now + 0.05);
-    osc.connect(g);
-    g.connect(master);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(900, now);
+    // slight downward pitch slide for a wooden "thud" character
+    osc.frequency.exponentialRampToValueAtTime(640, now + 0.09);
+
+    // mellow bandpass to remove harsh highs
+    const bodyFilter = ctx.createBiquadFilter();
+    bodyFilter.type = 'bandpass';
+    bodyFilter.frequency.value = 800;
+    bodyFilter.Q.value = 0.9;
+
+    const bodyGain = ctx.createGain();
+    // quick attack, medium decay for a wooden feel
+    bodyGain.gain.setValueAtTime(0.0001, now);
+    bodyGain.gain.exponentialRampToValueAtTime(0.9, now + 0.005);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+    osc.connect(bodyFilter);
+    bodyFilter.connect(bodyGain);
+    bodyGain.connect(master);
+
+    // short high-frequency noise transient for the click/attack
+    const noiseDur = 0.045;
+    const noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * noiseDur), ctx.sampleRate);
+    const bufData = noiseBuf.getChannelData(0);
+    for (let i = 0; i < bufData.length; i++) {
+      // shaped noise: stronger at the front, decays quickly
+      bufData[i] = (Math.random() * 2 - 1) * Math.exp(-5 * (i / bufData.length));
+    }
+    const noiseSrc = ctx.createBufferSource();
+    noiseSrc.buffer = noiseBuf;
+
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'highpass';
+    noiseFilter.frequency.value = 1200; // keep it bright but not piercing
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, now);
+    noiseGain.gain.linearRampToValueAtTime(0.6, now + 0.002);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + noiseDur);
+
+    noiseSrc.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(master);
+
+    // start/stop
     osc.start(now);
-    osc.stop(now + 0.06);
+    noiseSrc.start(now);
+    osc.stop(now + 0.13);
+    noiseSrc.stop(now + noiseDur);
+
+    // cleanup after nodes finish
+    const cleanupMs = Math.ceil((0.15 + 0.05) * 1000);
+    setTimeout(() => {
+      try {
+        osc.disconnect();
+        bodyFilter.disconnect();
+        bodyGain.disconnect();
+        noiseSrc.disconnect();
+        noiseFilter.disconnect();
+        noiseGain.disconnect();
+      } catch (e) { /* ignore */ }
+    }, cleanupMs);
   }
 
   function playWin(): void {
