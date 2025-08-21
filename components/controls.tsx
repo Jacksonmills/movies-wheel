@@ -134,10 +134,10 @@ function SliceList({ slices, removeSlice, isSpinning }: { slices: Slice[]; remov
 
 export default function Controls(props: Props) {
   const {
-    slices, radius, spinSecs, removalMode, isSpinning, winner,
+    slices, radius, spinSecs, removalMode, isSpinning,
     setRadius, setSpinSecs, setRemovalMode,
     addSlice, newLabel, setNewLabel, newColor, setNewColor,
-    removeSlice, shuffleColors, clearAll, exportJSON, importJSON
+    removeSlice, exportJSON, importJSON
   } = props;
 
   return (

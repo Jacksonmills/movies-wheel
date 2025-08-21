@@ -6,6 +6,10 @@ import Pointer from './pointer';
 import Controls from './controls';
 import { Button } from './ui/button';
 
+interface WindowWithWebkitAudio {
+  webkitAudioContext?: typeof AudioContext;
+}
+
 type Slice = { id: string; label: string; color: string; };
 
 const DEFAULT_COLORS = [
@@ -40,7 +44,6 @@ export default function Wheel() {
   const [winner, setWinner] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const pointerRef = useRef<HTMLDivElement | null>(null);
 
   const rotationRef = useRef(0);
   // Audio plumbing
@@ -63,12 +66,12 @@ export default function Wheel() {
       if (m !== null) setMuted(m === 'true');
       if (v !== null) setVolume(Number(v));
     } catch (e) {
-      // ignore
+      console.error("Error loading sound preferences:", e);
     }
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem('movieWheel.sound.muted', String(muted)); } catch (e) { }
+    try { localStorage.setItem('movieWheel.sound.muted', String(muted)); } catch (e) { console.error("Error saving sound preferences:", e); }
     if (masterGainRef.current && audioRef.current) {
       const ctx = audioRef.current;
       const g = masterGainRef.current;
@@ -120,45 +123,29 @@ export default function Wheel() {
     reader.readAsText(file);
   }
 
-  // Redraw when slices, radius, or theme changes so CSS variables
-  // (defined under :root/.dark) are re-read and applied to the canvas.
-  // Use a double requestAnimationFrame to ensure the browser has applied
-  // the theme class on the document before we read computed styles.
-  useEffect(() => {
-    let raf1 = 0;
-    let raf2 = 0;
-    raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => {
-        draw(rotationRef.current);
-      });
-    });
-    return () => {
-      if (raf1) cancelAnimationFrame(raf1);
-      if (raf2) cancelAnimationFrame(raf2);
-    };
-  }, [slices, radius, resolvedTheme]);
-
-  // Also observe documentElement.class changes directly as a robust fallback
-  // for theme toggles (next-themes toggles a class on the root). This
-  // ensures we redraw even if the theme change happens outside React's
-  // lifecycle timing.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const root = document.documentElement;
-    const obs = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        if (m.type === "attributes" && m.attributeName === "class") {
-          // schedule redraw after paint
-          requestAnimationFrame(() => requestAnimationFrame(() => draw(rotationRef.current)));
-          break;
-        }
+  const wrapRightAlignedText = useCallback((ctx: CanvasRenderingContext2D, text: string, maxWidth: number, padding: number) => {
+    const words = text.split(" ");
+    let line = "";
+    const lines: string[] = [];
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxWidth) {
+        if (line) lines.push(line);
+        line = w;
+      } else {
+        line = test;
       }
-    });
-    obs.observe(root, { attributes: true, attributeFilter: ["class"] });
-    return () => obs.disconnect();
-  }, []);
+    }
+    if (line) lines.push(line);
+    let y = 4;
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      ctx.fillText(l, radius - padding, y);
+      y += 16;
+    }
+  }, [radius]);
 
-  function draw(rotation: number) {
+  const draw = useCallback((rotation: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -183,6 +170,7 @@ export default function Wheel() {
         styleSource = getComputedStyle(canvas);
       }
     } catch (e) {
+      console.error("Error playing win sound:", e);
       styleSource = canvas ? getComputedStyle(canvas) : getComputedStyle(document.documentElement);
     }
 
@@ -245,14 +233,59 @@ export default function Wheel() {
     ctx.fill();
 
     ctx.restore();
-  }
+  }, [slices, radius, angle, wrapRightAlignedText]);
+
+  // Redraw when slices, radius, or theme changes so CSS variables
+  // (defined under :root/.dark) are re-read and applied to the canvas.
+  // Use a double requestAnimationFrame to ensure the browser has applied
+  // the theme class on the document before we read computed styles.
+  useEffect(() => {
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        draw(rotationRef.current);
+      });
+    });
+    return () => {
+      if (raf1) cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, [draw, resolvedTheme]);
+
+  // Also observe documentElement.class changes directly as a robust fallback
+  // for theme toggles (next-themes toggles a class on the root). This
+  // ensures we redraw even if the theme change happens outside React's
+  // lifecycle timing.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const root = document.documentElement;
+    const obs = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === "attributes" && m.attributeName === "class") {
+          // schedule redraw after paint
+          requestAnimationFrame(() => requestAnimationFrame(() => draw(rotationRef.current)));
+          break;
+        }
+      }
+    });
+    obs.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, [draw]);
 
   // --- Audio helpers -------------------------------------------------
   const ensureAudio = useCallback(async (): Promise<void> => {
     if (audioRef.current) return;
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+    const ctor = (typeof AudioContext !== 'undefined'
+      ? AudioContext
+      : (window as WindowWithWebkitAudio).webkitAudioContext);
+
+    if (!ctor) throw new Error('AudioContext is not available in this environment');
+
+    const ctx = new ctor();
     // resume to satisfy autoplay policies
-    try { await ctx.resume(); } catch (e) { /* ignore */ }
+    try { await ctx.resume(); } catch (e) { console.error("Error resuming audio context:", e); }
     const master = ctx.createGain();
     master.gain.value = muted ? 0 : volume;
     master.connect(ctx.destination);
@@ -303,28 +336,6 @@ export default function Wheel() {
     }
   }
 
-  function wrapRightAlignedText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, padding: number) {
-    const words = text.split(" ");
-    let line = "";
-    const lines: string[] = [];
-    for (let w of words) {
-      const test = line ? line + " " + w : w;
-      if (ctx.measureText(test).width > maxWidth) {
-        if (line) lines.push(line);
-        line = w;
-      } else {
-        line = test;
-      }
-    }
-    if (line) lines.push(line);
-    let y = 4;
-    for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      ctx.fillText(l, radius - padding, y);
-      y += 16;
-    }
-  }
-
   function spin() {
     if (isSpinning || slices.length === 0) return;
     setIsSpinning(true);
@@ -347,7 +358,7 @@ export default function Wheel() {
         const eps = 1e-6;
         const idx = Math.floor(((relative - eps + TAU) % TAU) / angle) % slices.length;
         lastIndexRef.current = idx;
-      } catch (e) { lastIndexRef.current = null; }
+      } catch (e) { lastIndexRef.current = null; console.error("Error playing win sound:", e); }
     }).catch(() => { /* ignore */ });
 
     const step = (now: number) => {
@@ -365,9 +376,9 @@ export default function Wheel() {
         if (idx !== lastIndexRef.current) {
           lastIndexRef.current = idx;
           // play tick when advancing into a new slice
-          try { playTick(); } catch (e) { /* ignore */ }
+          try { playTick(); } catch (e) { console.error("Error playing win sound:", e); }
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) { console.error("Error playing win sound:", e); }
 
       draw(value);
       if (t < 1) {
@@ -386,7 +397,9 @@ export default function Wheel() {
           setSlices(prev => prev.filter((_, i) => i !== landedIdx));
         }
         // celebratory sound and reset lastIndex so future spins re-init
-        try { playWin(); } catch (e) { /* ignore */ }
+        try { playWin(); } catch (e) {
+          console.error("Error playing win sound:", e);
+        }
         lastIndexRef.current = null;
         setIsSpinning(false);
       }
