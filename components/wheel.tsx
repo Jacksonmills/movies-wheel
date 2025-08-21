@@ -44,6 +44,10 @@ export default function Wheel() {
   const [winner, setWinner] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Track when we've painted the canvas once so we can avoid showing an
+  // uninitialized blank/rounded pill for a split-second on first render.
+  const [canvasShown, setCanvasShown] = useState(false);
+  const canvasShownRef = useRef(false);
 
   const rotationRef = useRef(0);
   // Audio plumbing
@@ -239,6 +243,16 @@ export default function Wheel() {
     ctx.fill();
 
     ctx.restore();
+
+    // After a draw completes, schedule a double RAF to wait for the browser
+    // to commit the paint. Only reveal the canvas once we've had at least one
+    // painted frame to avoid the brief empty-pill appearance on mount.
+    if (!canvasShownRef.current) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        canvasShownRef.current = true;
+        try { setCanvasShown(true); } catch (e) { /* ignore if unmounted */ }
+      }));
+    }
   }, [slices, radius, angle, wrapRightAlignedText]);
 
   // Redraw when slices, radius, or theme changes so CSS variables
@@ -471,10 +485,18 @@ export default function Wheel() {
   return (
     <div className="w-full min-h-screen p-6">
       <div className="mx-auto max-w-6xl grid gap-6 md:grid-cols-[1fr_360px]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative">
+        <div className="flex flex-col items-center gap-8">
+          <div className="relative" style={{
+            width: `${radius * 2}px`,
+            height: `${radius * 2}px`,
+          }}>
             <Pointer className="absolute left-1/2 -translate-x-1/2 -top-3 z-10 scale-200" />
-            <canvas ref={canvasRef} className="rounded-full shadow-sm border bg-card" />
+            <canvas
+              ref={canvasRef}
+              className="rounded-full shadow-sm border bg-card"
+              // keep the canvas in layout but invisible until we've painted
+              style={{ visibility: canvasShown ? 'visible' : 'hidden' }}
+            />
           </div>
 
           <div className="flex items-center gap-3">

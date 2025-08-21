@@ -35,12 +35,13 @@ type Props = {
   setVolume?: (n: number) => void;
 };
 
-function AddMovieForm({ newLabel, setNewLabel, newColor, setNewColor, addSlice }: {
+function AddMovieForm({ newLabel, setNewLabel, newColor, setNewColor, addSlice, disabled }: {
   newLabel: string;
   setNewLabel: (s: string) => void;
   newColor: string;
   setNewColor: (s: string) => void;
   addSlice: () => void;
+  disabled: boolean;
 }) {
   return (
     <Card>
@@ -68,25 +69,27 @@ function AddMovieForm({ newLabel, setNewLabel, newColor, setNewColor, addSlice }
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewLabel(e.target.value)}
             onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') addSlice(); }}
             placeholder="Movie title"
+            disabled={disabled}
           />
 
-          <Button onClick={addSlice}>Add</Button>
+          <Button onClick={addSlice} disabled={disabled}>Add</Button>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function WheelSettings({ radius, spinSecs, setRadius, setSpinSecs, removalMode, setRemovalMode }: {
+function WheelSettings({ radius, spinSecs, setRadius, setSpinSecs, removalMode, setRemovalMode, disabled }: {
   radius: number;
   spinSecs: number;
   setRadius: (n: number) => void;
   setSpinSecs: (n: number) => void;
   removalMode: boolean;
   setRemovalMode: (b: boolean) => void;
+  disabled: boolean;
 }) {
   return (
-    <Card>
+    <Card className={disabled ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}>
       <CardHeader>
         <CardTitle>Wheel settings</CardTitle>
       </CardHeader>
@@ -142,9 +145,9 @@ export default function Controls(props: Props) {
 
   return (
     <div className="space-y-5">
-      <AddMovieForm newLabel={newLabel} setNewLabel={setNewLabel} newColor={newColor} setNewColor={setNewColor} addSlice={addSlice} />
+      <AddMovieForm newLabel={newLabel} setNewLabel={setNewLabel} newColor={newColor} setNewColor={setNewColor} addSlice={addSlice} disabled={isSpinning} />
 
-      <WheelSettings radius={radius} spinSecs={spinSecs} setRadius={setRadius} setSpinSecs={setSpinSecs} removalMode={removalMode} setRemovalMode={setRemovalMode} />
+      <WheelSettings radius={radius} spinSecs={spinSecs} setRadius={setRadius} setSpinSecs={setSpinSecs} removalMode={removalMode} setRemovalMode={setRemovalMode} disabled={isSpinning} />
 
       <SliceList slices={slices} removeSlice={removeSlice} isSpinning={isSpinning} />
 
