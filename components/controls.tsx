@@ -1,3 +1,5 @@
+"use client";
+
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Input } from './ui/input';
@@ -5,35 +7,9 @@ import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Slider } from './ui/slider';
 import { Checkbox } from './ui/checkbox';
+import { useWheel } from './wheel-context';
 
 type Slice = { id: string; label: string; color: string; };
-
-type Props = {
-  slices: Slice[];
-  radius: number;
-  spinSecs: number;
-  removalMode: boolean;
-  isSpinning: boolean;
-  winner: string | null;
-  setRadius: (n: number) => void;
-  setSpinSecs: (n: number) => void;
-  setRemovalMode: (b: boolean) => void;
-  addSlice: () => void;
-  newLabel: string;
-  setNewLabel: (s: string) => void;
-  newColor: string;
-  setNewColor: (s: string) => void;
-  removeSlice: (id: string) => void;
-  shuffleColors: () => void;
-  clearAll: () => void;
-  exportJSON: () => void;
-  importJSON: (f: File) => void;
-  // sound controls (optional wiring by parent)
-  muted?: boolean;
-  volume?: number;
-  setMuted?: (b: boolean) => void;
-  setVolume?: (n: number) => void;
-};
 
 function AddMovieForm({ newLabel, setNewLabel, newColor, setNewColor, addSlice, disabled }: {
   newLabel: string;
@@ -135,13 +111,14 @@ function SliceList({ slices, removeSlice, isSpinning }: { slices: Slice[]; remov
   );
 }
 
-export default function Controls(props: Props) {
+export default function Controls() {
   const {
     slices, radius, spinSecs, removalMode, isSpinning,
     setRadius, setSpinSecs, setRemovalMode,
     addSlice, newLabel, setNewLabel, newColor, setNewColor,
-    removeSlice, exportJSON, importJSON
-  } = props;
+    removeSlice, exportJSON, importJSON,
+    muted, setMuted, volume, setVolume
+  } = useWheel();
 
   return (
     <div className="space-y-5">
@@ -176,13 +153,13 @@ export default function Controls(props: Props) {
         <CardContent>
           <div className="flex flex-col gap-3">
             <div className="inline-flex items-center gap-2">
-              <Checkbox checked={Boolean(props.muted)} onCheckedChange={(c: boolean | 'indeterminate' | undefined) => props.setMuted && props.setMuted(Boolean(c))} />
+              <Checkbox checked={Boolean(muted)} onCheckedChange={(c: boolean | 'indeterminate' | undefined) => setMuted && setMuted(Boolean(c))} />
               <Label>Mute</Label>
             </div>
 
             <div>
-              <Label>Volume: {Math.round((props.volume ?? 0.6) * 100)}%</Label>
-              <Slider value={[props.volume ?? 0.6]} min={0} max={1} step={0.01} onValueChange={(v: number[] | undefined) => props.setVolume && props.setVolume(v ? v[0] : (props.volume ?? 0.6))} />
+              <Label>Volume: {Math.round((volume ?? 0.6) * 100)}%</Label>
+              <Slider value={[volume ?? 0.6]} min={0} max={1} step={0.01} onValueChange={(v: number[] | undefined) => setVolume && setVolume(v ? v[0] : (volume ?? 0.6))} />
             </div>
           </div>
         </CardContent>
